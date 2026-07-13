@@ -1,0 +1,38 @@
+name: Každodenná záloha dát do mailu
+
+on:
+  schedule:
+    # 22:00 SEČ (Slovenský čas) je 21:00 UTC v lete alebo 20:00 UTC v zime.
+    # Nastavíme 20:00 UTC, čo pokryje zimný čas. V lete to príde o 22:00.
+    - cron: '0 20 * * *'
+  workflow_dispatch: # Umožní spustiť zálohu aj manuálne kliknutím na GitHube
+
+jobs:
+  send-backup:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Stiahnutie najnovších dát z GitHub Gistu
+      run: |
+        curl -L -o data.csv "https://gist.githubusercontent.com/raw/${{ secrets.GIST_ID }}/data.csv"
+        curl -L -o Zoznam_mien.txt "https://gist.githubusercontent.com/raw/${{ secrets.GIST_ID }}/Zoznam_mien.txt"
+
+    - name: Odoslanie e-mailu so zálohou
+      uses: dawidd6/action-send-mail@v3
+      with:
+        # Nastavenie SMTP servera (tu pre Gmail)
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        
+        # Predmet a príjemca
+        subject: "Záloha dát Minúty 2026 - Ostatný stav"
+        to: ${{ secrets.EMAIL_USERNAME }} # Pošle mail sám sebe (môžete zmeniť)
+        from: "Minúty 2026 Backup"
+        
+        # Telo mailu
+        body: "Ahoj, v prilohe posielam aktualnu zalohu dat (data.csv a Zoznam_mien.txt) zo dňa ${{ github.event.repository.updated_at }}."
+        
+        # Prílohy (stiahnuté súbory z Gistu)
+        attachments: data.csv,Zoznam_mien.txt
