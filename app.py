@@ -9,11 +9,24 @@ import io
 st.set_page_config(page_title="Minúty 2026", layout="centered")
 
 # --- GITHUB GIST KONFIGURÁCIA ---
-# Tieto údaje si pridaj do Streamlit Cloud Secrets
 GIST_ID = st.secrets["github"]["gist_id"]
 TOKEN = st.secrets["github"]["token"]
-DATA_FILE = "data.csv"
 NAMES_FILE = "Zoznam_mien.txt"
+
+# --- 1. KROK: VÝBER ČLNU V ĽAVOM PANELU ---
+# Menu je na úplnom začiatku, aby sme vedeli, s akým súborom pracovať
+st.sidebar.header("Výber plavidla")
+vybrany_cln = st.sidebar.selectbox(
+    "Aktuálny čln:",
+    options=["🔴 Červený čln", "🟡 Žltý čln"],
+    index=0  # 0 znamená, že sa vždy automaticky otvorí Červený čln
+)
+
+# Dynamicky určíme názov súboru podľa vybraného člnu
+if vybrany_cln == "🔴 Červený čln":
+    DATA_FILE = "data.csv"
+else:
+    DATA_FILE = "data_zlty.csv"
 
 # --- POMOCNÉ FUNKCIE PRE GIST ---
 def load_from_gist(filename, default_content=""):
@@ -140,7 +153,8 @@ def save_record_callback():
     st.session_state.action_msg = ("success", "Záznam uložený do Cloudu!")
 
 # --- HLAVNÁ APP ---
-st.title("Minúty 2026 🏄")
+# Nadpis sa dynamicky mení podľa vybraného člnu
+st.title(f"Minúty 2026 – {vybrany_cln} 🏄")
 
 raw_df = load_data()
 full_df_with_minutes = process_dataframe(raw_df)
@@ -152,11 +166,11 @@ if not full_df_with_minutes.empty:
     export_df = full_df_with_minutes.copy().sort_values(['Date', 'SortValue'])
     export_df = export_df[['Date', 'Meno', 'Hodnota', 'Minúty', 'Tankovanie']]
     csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
-    st.sidebar.download_button("📥 Stiahnuť report (CSV)", data=csv_data, file_name=f"report_{date.today()}.csv", mime="text/csv")
+    st.sidebar.download_button(f"📥 Stiahnuť report ({vybrany_cln}) (CSV)", data=csv_data, file_name=f"report_{DATA_FILE.replace('.csv','')}_{date.today()}.csv", mime="text/csv")
 
 st.sidebar.divider()
 
-uploaded_file = st.sidebar.file_uploader("Nahrať záložné CSV", type=["csv", "txt"])
+uploaded_file = st.sidebar.file_uploader(f"Nahrať záložné CSV pre {vybrany_cln}", type=["csv", "txt"])
 if uploaded_file is not None:
     if st.sidebar.button("⚠️ Obnoviť dáta zo súboru"):
         try:
@@ -166,7 +180,7 @@ if uploaded_file is not None:
             if "Tankovanie" not in imported_df.columns:
                 imported_df["Tankovanie"] = "-"
             save_data(imported_df[["ID", "Date", "Meno", "Hodnota", "Tankovanie"]])
-            st.sidebar.success("Dáta nahraté do Gistu !")
+            st.sidebar.success(f"Dáta pre {vybrany_cln} nahraté do Gistu!")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Chyba: {e}")
@@ -193,23 +207,15 @@ st.button("Uložiť záznam", type="primary", on_click=save_record_callback)
 
 # --- VÝPOČET: POSLEDNÉ TANKOVANIE + PRENOS ZOSTATKU + ČAS DOZADU ---
 if not full_df_with_minutes.empty:
-    # Zoradíme od najstaršieho po najnovšie pre korektný výpočet
     df_asc = full_df_with_minutes.sort_values(['Date', 'SortValue'], ascending=[True, True])
     tank_indices = df_asc.index[df_asc['Tankovanie'] != "-"].tolist()
 
     if tank_indices:
-        # Index úplne posledného tankovania
         last_tank_idx = tank_indices[-1]
-        
-        # 1. Info o poslednom tankovaní
         objem_posledne = df_asc.loc[last_tank_idx, 'Tankovanie']
-        
-        # 2. VÝPOČET MINÚT DOZADU (ako dávno sa tankovalo)
         pos_v_tabulke = df_asc.index.get_loc(last_tank_idx)
         jazdy_po_tankovani = df_asc.iloc[pos_v_tabulke + 1:]['Minúty'].sum()
         
-        # 3. VÝPOČET ZOSTATKU (Prenos z minulých tankovaní)
-        # Kredit zo všetkých tankovaní predtým
         predosle_tankovania = df_asc.loc[tank_indices[:-1]]
         kredit_minula = 0
         for t in predosle_tankovania['Tankovanie']:
@@ -219,7 +225,6 @@ if not full_df_with_minutes.empty:
         jazdy_do_tankovania = df_asc.iloc[:pos_v_tabulke]['Minúty'].sum()
         zostatok_z_minula = max(0, kredit_minula - jazdy_do_tankovania)
 
-        # 4. NOVÝ KREDIT A CELKOVÝ STAV
         nove_litre = 0
         if "20 L" in objem_posledne: nove_litre += 20
         if "40 L" in objem_posledne: nove_litre += 40
@@ -227,25 +232,20 @@ if not full_df_with_minutes.empty:
         
         zostava_presne = (nove_minuty + zostatok_z_minula) - jazdy_po_tankovani
 
-        # 5. ZAOKRÚHĽOVANIE A IKONY
         if zostava_presne > 0:
             zostava_zaokruhlene = int(zostava_presne // 10) * 10
             hod = zostava_zaokruhlene // 60
             minutky = zostava_zaokruhlene % 60
             cas_text = f"{hod}h {minutky:02d}min"
-            
-            # ✅ nad 60 minút, ⚠️❗ pri 60 a menej
             farba_ikona = "✅" if zostava_zaokruhlene > 60 else "⚠️❗"
         else:
             cas_text = "NÁDRŽ JE PRÁZDNA"
             farba_ikona = "🚨"
 
-        # Zobrazenie výsledku
         st.info(f"⛽ **Posledné ({objem_posledne}):** pred **{int(jazdy_po_tankovani)} min** | {farba_ikona} **V nádrži zostáva cca:** {cas_text}")
     else:
         st.warning("⛽ Žiadne tankovanie v databáze.")
 
-# Zobrazenie hlásení (success/error)
 if 'action_msg' in st.session_state:
     m_type, m_text = st.session_state.action_msg
     if m_type == "error": st.error(m_text)
