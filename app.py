@@ -168,3 +168,200 @@ full_df_with_minutes = process_dataframe(raw_df)
 if not full_df_with_minutes.empty:
     export_df = full_df_with_minutes.copy().sort_values(['Date', 'SortValue'])
     export_df = export_df[['Date', 'Meno', 'Hodnota', 'Minúty', 'Tankovanie']]
+    csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
+    st.sidebar.download_button(f"📥 Stiahnuť report ({vybrany_cln}) (CSV)", data=csv_data, file_name=f"report_{DATA_FILE.replace('.csv','')}_{date.today()}.csv", mime="text/csv")
+
+st.sidebar.divider()
+
+uploaded_file = st.sidebar.file_uploader(f"Nahrať záložné CSV pre {vybrany_cln}", type=["csv", "txt"])
+if uploaded_file is not None:
+    if st.sidebar.button("⚠️ Obnoviť dáta zo súboru"):
+        try:
+            imported_df = pd.read_csv(uploaded_file)
+            if "ID" not in imported_df.columns:
+                imported_df["ID"] = [str(uuid.uuid4()) for _ in range(len(imported_df))]
+            if "Tankovanie" not in imported_df.columns:
+                imported_df["Tankovanie"] = "-"
+            save_data(imported_df[["ID", "Date", "Meno", "Hodnota", "Tankovanie"]])
+            st.sidebar.success(f"Dáta pre {vybrany_cln} nahraté do Gistu!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Chyba: {e}")
+
+# --- SEKCIA 1: PRIDAŤ ---
+st.header("+ Pridať lyžiara")
+col1, col2 = st.columns(2)
+with col1:
+    st.date_input("Dátum:", date.today(), key="zaznam_datum")
+pridat_nove = st.checkbox("+ Pridaj meno", key="pridat_nove_checkbox")
+
+with col2:
+    st.selectbox(
+        "Meno:", 
+        options=load_names(), 
+        disabled=pridat_nove, 
+        key="vybrane_meno_selectbox",
+        index=None,
+        placeholder="Začni písať meno..."
+    )
+
+if pridat_nove:
+    st.text_input("Zadaj nové meno:", key="input_nove_meno")
+
+st.text_input("Hodnota", max_chars=3, key="input_hodnota")
+col_t1, col_t2 = st.columns(2)
+col_t1.checkbox("20 L", key="input_t20")
+col_t2.checkbox("40 L", key="input_t40")
+
+st.button("Uložiť záznam", type="primary", on_click=save_record_callback)
+
+# --- VÝPOČET: POSLEDNÉ TANKOVANIE + PRENOS ZOSTATKU + ČAS DOZADU ---
+if not full_df_with_minutes.empty:
+    df_asc = full_df_with_minutes.sort_values(['Date', 'SortValue'], ascending=[True, True])
+    tank_indices = df_asc.index[df_asc['Tankovanie'] != "-"].tolist()
+
+    if tank_indices:
+        last_tank_idx = tank_indices[-1]
+        objem_posledne = df_asc.loc[last_tank_idx, 'Tankovanie']
+        pos_v_tabulke = df_asc.index.get_loc(last_tank_idx)
+        jazdy_po_tankovani = df_asc.iloc[pos_v_tabulke + 1:]['Minúty'].sum()
+        
+        predosle_tankovania = df_asc.loc[tank_indices[:-1]]
+        kredit_minula = 0
+        for t in predosle_tankovania['Tankovanie']:
+            if "20 L" in t: kredit_minula += 90
+            if "40 L" in t: kredit_minula += 180
+        
+        jazdy_do_tankovania = df_asc.iloc[:pos_v_tabulke]['Minúty'].sum()
+        zostatok_z_minula = max(0, kredit_minula - jazdy_do_tankovania)
+
+        nove_litre = 0
+        if "20 L" in objem_posledne: nove_litre += 20
+        if "40 L" in objem_posledne: nove_litre += 40
+        nove_minuty = nove_litre * 4.5
+        
+        zostava_presne = (nove_minuty + zostatok_z_minula) - jazdy_po_tankovani
+
+        if zostava_presne > 0:
+            zostava_zaokruhlene = int(zostava_presne // 10) * 10
+            hod = zostava_zaokruhlene // 60
+            minutky = zostava_zaokruhlene % 60
+            cas_text = f"{hod}h {minutky:02d}min"
+            farba_ikona = "✅" if zostava_zaokruhlene > 60 else "⚠️❗"
+        else:
+            cas_text = "NÁDRŽ JE PRÁZDNA"
+            farba_ikona = "🚨"
+
+        st.info(f"⛽ **Posledné ({objem_posledne}):** pred **{int(jazdy_po_tankovani)} min** | {farba_ikona} **V nádrži zostáva cca:** {cas_text}")
+    else:
+        st.warning("⛽ Žiadne tankovanie v databez.")
+
+if 'action_msg' in st.session_state:
+    m_type, m_text = st.session_state.action_msg
+    if m_type == "error": st.error(m_text)
+    else: st.success(m_text)
+    del st.session_state.action_msg
+
+st.divider()
+
+# --- SEKCIA 2: HISTÓRIA ---
+st.header("História")
+hist_datum = st.date_input("Dátum histórie", date.today(), key="historia_datum")
+
+if not full_df_with_minutes.empty:
+    df_display = full_df_with_minutes[full_df_with_minutes['Date'] == hist_datum].copy()
+    if not df_display.empty:
+        df_display['Zmazať'] = False
+        edited_df = st.data_editor(
+            df_display[['ID', 'Meno', 'Hodnota', 'Minúty', 'Tankovanie', 'Zmazať']],
+            hide_index=True, 
+            width="stretch", 
+            column_config={"ID": None, "Minúty": st.column_config.NumberColumn(disabled=True), "Zmazať": st.column_config.CheckboxColumn("Zmazať")},
+            key="main_editor"
+        )
+        if st.button("Uložiť zmeny v tabuľke"):
+            to_keep = edited_df[edited_df['Zmazať'] == False][['ID', 'Meno', 'Hodnota', 'Tankovanie']]
+            master_df = load_data()
+            master_df = master_df[~master_df['ID'].isin(df_display['ID'])]
+            to_keep['Date'] = hist_datum
+            save_data(pd.concat([master_df, to_keep], ignore_index=True))
+            st.rerun()
+    else: st.info("Žiadne záznamy.")
+
+st.divider()
+st.header("Súhrn minút")
+
+if not full_df_with_minutes.empty:
+    celkovy_sum = full_df_with_minutes.groupby('Meno')['Minúty'].sum().reset_index()
+    celkovy_sum = celkovy_sum.rename(columns={'Minúty': 'Celkovo (min)'})
+    
+    today = date.today()
+    mask_mesiac = (full_df_with_minutes['Date'].apply(lambda x: x.month == today.month)) & \
+                  (full_df_with_minutes['Date'].apply(lambda x: x.year == today.year))
+    
+    mesacny_df = full_df_with_minutes[mask_mesiac]
+    mesacny_sum = mesacny_df.groupby('Meno')['Minúty'].sum().reset_index()
+    mesacny_sum = mesacny_sum.rename(columns={'Minúty': 'Tento mesiac (min)'})
+
+    finalny_suhrn = pd.merge(celkovy_sum, mesacny_sum, on='Meno', how='left').fillna(0)
+    finalny_suhrn['Tento mesiac (min)'] = finalny_suhrn['Tento mesiac (min)'].astype(int)
+    finalny_suhrn = finalny_suhrn.sort_values(by='Celkovo (min)', ascending=False)
+
+    sum_celkovo = finalny_suhrn['Celkovo (min)'].sum()
+    sum_mesiac = finalny_suhrn['Tento mesiac (min)'].sum()
+    
+    riadok_spolu = pd.DataFrame({
+        'Meno': ['--- SPOLU ---'], 
+        'Celkovo (min)': [sum_celkovo], 
+        'Tento mesiac (min)': [sum_mesiac]
+    })
+    
+    finalny_suhrn_so_spolu = pd.concat([finalny_suhrn, riadok_spolu], ignore_index=True)
+    st.dataframe(finalny_suhrn_so_spolu, hide_index=True, width="stretch")
+else:
+    st.info("Zatiaľ žiadne dáta.")
+
+st.divider()
+# --- UPRAVENÁ SEKCIA: SÚHRN PODĽA MESIACOV ---
+st.header("Súhrn podľa mesiacov")
+mesiace_map = {"Apríl": 4, "Máj": 5, "Jún": 6, "Júl": 7, "August": 8, "September": 9, "Október": 10}
+vybrane_názvy = st.pills("Vyber mesiace:", options=list(mesiace_map.keys()), selection_mode="multi")
+
+if not full_df_with_minutes.empty and vybrane_názvy:
+    vybrane_cisla = [mesiace_map[m] for m in vybrane_názvy]
+    mask_custom = full_df_with_minutes['Date'].apply(lambda x: x.month in vybrane_cisla)
+    filtered_df = full_df_with_minutes[mask_custom]
+    
+    if not filtered_df.empty:
+        custom_sum = filtered_df.groupby('Meno')['Minúty'].sum().reset_index()
+        custom_sum.columns = ['Meno', 'Suma minút']
+        custom_sum = custom_sum.sort_values(by='Suma minút', ascending=False)
+        
+        suma_filtrovana = custom_sum['Suma minút'].sum()
+        riadok_spolu_custom = pd.DataFrame({
+            'Meno': ['--- SPOLU ---'], 
+            'Suma minút': [suma_filtrovana]
+        })
+        
+        custom_sum_so_spolu = pd.concat([custom_sum, riadok_spolu_custom], ignore_index=True)
+        
+        st.subheader(f"Štatistika za: {', '.join(vybrane_názvy)}")
+        st.dataframe(custom_sum_so_spolu, hide_index=True, width="stretch")
+        
+        # --- NOVÁ FUNKCIA: Tlačidlo na stiahnutie reportu z vybraných mesiacov ---
+        # Exportujeme detailné pôvodné riadky, ktoré patria pod vybrané mesiace
+        mesacny_export_df = filtered_df.copy().sort_values(['Date', 'SortValue'])
+        mesacny_export_df = mesacny_export_df[['Date', 'Meno', 'Hodnota', 'Minúty', 'Tankovanie']]
+        mesacny_csv_data = mesacny_export_df.to_csv(index=False).encode('utf-8-sig')
+        
+        st.download_button(
+            label="📥 Stiahnuť report pre vybrané mesiace (CSV)",
+            data=mesacny_csv_data,
+            file_name=f"report_mesiace_{date.today()}.csv",
+            mime="text/csv",
+            key="download_mesiace_btn"
+        )
+    else:
+        st.info("Pre vybrané mesiace nie sú žiadne záznamy.")
+elif not vybrane_názvy:
+    st.info("☝️ Klikni na mesiace vyššie.")
