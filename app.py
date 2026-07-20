@@ -232,7 +232,7 @@ if not full_df_with_minutes.empty:
             if "20 L" in t: kredit_minula += 90
             if "40 L" in t: kredit_minula += 180
         
-        jazdy_do_tankovania = df_asc.iloc[:pos_v_tabulke]['Minúty'].sum()
+        jazdy_do_tankovania = df_asc.iloc[:pos_v_tankulke]['Minúty'].sum()
         zostatok_z_minula = max(0, kredit_minula - jazdy_do_tankovania)
 
         nove_litre = 0
@@ -254,7 +254,7 @@ if not full_df_with_minutes.empty:
 
         st.info(f"⛽ **Posledné ({objem_posledne}):** pred **{int(jazdy_po_tankovani)} min** | {farba_ikona} **V nádrži zostáva cca:** {cas_text}")
     else:
-        st.warning("⛽ Žiadne tankovanie v databez.")
+        st.warning("⛽ Žiadne tankovanie v databáze.")
 
 if 'action_msg' in st.session_state:
     m_type, m_text = st.session_state.action_msg
@@ -322,7 +322,7 @@ else:
     st.info("Zatiaľ žiadne dáta.")
 
 st.divider()
-# --- UPRAVENÁ SEKCIA: SÚHRN PODĽA MESIACOV ---
+# --- SEKCIA: SÚHRN PODĽA MESIACOV ---
 st.header("Súhrn podľa mesiacov")
 mesiace_map = {"Apríl": 4, "Máj": 5, "Jún": 6, "Júl": 7, "August": 8, "September": 9, "Október": 10}
 vybrane_názvy = st.pills("Vyber mesiace:", options=list(mesiace_map.keys()), selection_mode="multi")
@@ -348,16 +348,13 @@ if not full_df_with_minutes.empty and vybrane_názvy:
         st.subheader(f"Štatistika za: {', '.join(vybrane_názvy)}")
         st.dataframe(custom_sum_so_spolu, hide_index=True, width="stretch")
         
-        # --- NOVÁ FUNKCIA: Tlačidlo na stiahnutie reportu z vybraných mesiacov ---
-        # Exportujeme detailné pôvodné riadky, ktoré patria pod vybrané mesiace
-        mesacny_export_df = filtered_df.copy().sort_values(['Date', 'SortValue'])
-        mesacny_export_df = mesacny_export_df[['Date', 'Meno', 'Hodnota', 'Minúty', 'Tankovanie']]
-        mesacny_csv_data = mesacny_export_df.to_csv(index=False).encode('utf-8-sig')
+        # --- UPRAVENÝ EXPORT: Sťahuje sa presne zobrazená tabuľka (Meno a Suma minút) ---
+        csv_vybrane_mesiace = custom_sum_so_spolu.to_csv(index=False).encode('utf-8-sig')
         
         st.download_button(
-            label="📥 Stiahnuť report pre vybrané mesiace (CSV)",
-            data=mesacny_csv_data,
-            file_name=f"report_mesiace_{date.today()}.csv",
+            label="📥 Stiahnuť výsledky minút (CSV)",
+            data=csv_vybrane_mesiace,
+            file_name=f"vysledky_mesiace_{date.today()}.csv",
             mime="text/csv",
             key="download_mesiace_btn"
         )
