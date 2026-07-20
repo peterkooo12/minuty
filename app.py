@@ -23,7 +23,7 @@ vybrany_cln = st.sidebar.selectbox(
 )
 
 # Dynamicky určíme názov súboru podľa vybraného člnu
-if vybrany_cln == "🔴 Červený čln":
+if vybrany_cln == " ":
     DATA_FILE = "data.csv"
 else:
     DATA_FILE = "data_zlty.csv"
