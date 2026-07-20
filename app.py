@@ -13,17 +13,15 @@ GIST_ID = st.secrets["github"]["gist_id"]
 TOKEN = st.secrets["github"]["token"]
 NAMES_FILE = "Zoznam_mien.txt"
 
-# --- 1. KROK: VÝBER ČLNU V ĽAVOM PANELU ---
-# Menu je na úplnom začiatku, aby sme vedeli, s akým súborom pracovať
-st.sidebar.header("Výber plavidla")
+# --- VÝBER ČLNU V ĽAVOM PANELU ---
+st.sidebar.header("Správa dát")
 vybrany_cln = st.sidebar.selectbox(
     "Aktuálny čln:",
     options=["🔴 Červený čln", "🟡 Žltý čln"],
-    index=0  # 0 znamená, že sa vždy automaticky otvorí Červený čln
+    index=0  
 )
 
-# Dynamicky určíme názov súboru podľa vybraného člnu
-if vybrany_cln == " ":
+if vybrany_cln == "🔴 Červený čln":
     DATA_FILE = "data.csv"
 else:
     DATA_FILE = "data_zlty.csv"
@@ -116,10 +114,15 @@ def process_dataframe(df):
 def save_record_callback():
     hodnota_in = st.session_state.get('input_hodnota', '')
     pridat_nove = st.session_state.get('pridat_nove_checkbox', False)
-    vybrane_meno = st.session_state.get('vybrane_meno_selectbox', '')
+    vybrane_meno = st.session_state.get('vybrane_meno_selectbox', None)
     nove_meno = st.session_state.get('input_nove_meno', '')
     zaznam_datum = st.session_state.get('zaznam_datum', date.today())
     
+    # Ochrana: Ak nevybral meno zo zoznamu a ani nepridáva nové
+    if not pridat_nove and (vybrane_meno is None or vybrane_meno == ""):
+        st.session_state.action_msg = ("error", "Vyber meno lyžiara alebo pridaj nové!")
+        return
+
     meno_na_zapis = nove_meno if pridat_nove else vybrane_meno
     if not hodnota_in.isdigit():
         st.session_state.action_msg = ("error", "Zadaj číselnú hodnotu!")
@@ -148,20 +151,22 @@ def save_record_callback():
     st.session_state.pridat_nove_checkbox = False
     st.session_state.input_t20 = False
     st.session_state.input_t40 = False
+    st.session_state.vybrane_meno_selectbox = None # Reset selectboxu na prázdny stav
     if 'input_nove_meno' in st.session_state:
         st.session_state.input_nove_meno = ""
     st.session_state.action_msg = ("success", "Záznam uložený do Cloudu!")
 
 # --- HLAVNÁ APP ---
-# Nadpis sa dynamicky mení podľa vybraného člnu
-st.title(f"Minúty 2026 – {vybrany_cln} 🏄")
+# KROK 1: Podmienka pre nadpis
+if vybrany_cln == "🔴 Červený čln":
+    st.title("Minúty 2026 🏄")
+else:
+    st.title(f"Minúty 2026 – {vybrany_cln} 🏄")
 
 raw_df = load_data()
 full_df_with_minutes = process_dataframe(raw_df)
 
 # --- BOČNÝ PANEL ---
-st.sidebar.header("Správa dát")
-
 if not full_df_with_minutes.empty:
     export_df = full_df_with_minutes.copy().sort_values(['Date', 'SortValue'])
     export_df = export_df[['Date', 'Meno', 'Hodnota', 'Minúty', 'Tankovanie']]
@@ -193,7 +198,15 @@ with col1:
 pridat_nove = st.checkbox("+ Pridaj meno", key="pridat_nove_checkbox")
 
 with col2:
-    st.selectbox("Meno:", options=load_names(), disabled=pridat_nove, key="vybrane_meno_selectbox")
+    # KROK 2: Pridaný index=None a placeholder pre lepšie vyhľadávanie bez dopisovania
+    st.selectbox(
+        "Meno:", 
+        options=load_names(), 
+        disabled=pridat_nove, 
+        key="vybrane_meno_selectbox",
+        index=None,
+        placeholder="Začni písať meno..."
+    )
 
 if pridat_nove:
     st.text_input("Zadaj nové meno:", key="input_nove_meno")
