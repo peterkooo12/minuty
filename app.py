@@ -232,7 +232,7 @@ if not full_df_with_minutes.empty:
             if "20 L" in t: kredit_minula += 90
             if "40 L" in t: kredit_minula += 180
         
-        jazdy_do_tankovania = df_asc.iloc[:pos_v_tankulke]['Minúty'].sum()
+        jazdy_do_tankovania = df_asc.iloc[:pos_v_tabulke]['Minúty'].sum()
         zostatok_z_minula = max(0, kredit_minula - jazdy_do_tankovania)
 
         nove_litre = 0
@@ -348,7 +348,6 @@ if not full_df_with_minutes.empty and vybrane_názvy:
         st.subheader(f"Štatistika za: {', '.join(vybrane_názvy)}")
         st.dataframe(custom_sum_so_spolu, hide_index=True, width="stretch")
         
-        # --- UPRAVENÝ EXPORT: Sťahuje sa presne zobrazená tabuľka (Meno a Suma minút) ---
         csv_vybrane_mesiace = custom_sum_so_spolu.to_csv(index=False).encode('utf-8-sig')
         
         st.download_button(
