@@ -361,8 +361,9 @@ if not full_df_with_minutes.empty and vybrane_názvy:
         st.info("Pre vybrané mesiace nie sú žiadne záznamy.")
 elif not vybrane_názvy:
     st.info("☝️ Klikni na mesiace vyššie.")
+    
+# --- Lyžiar ---
 
-//lyžiar
 st.divider()
 # --- SEKCIA: EXPORT PRE KONKRÉTNEHO LYŽIARA ---
 st.header("Export pre konkrétneho lyžiara")
