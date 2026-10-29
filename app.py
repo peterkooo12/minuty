@@ -157,7 +157,7 @@ def save_record_callback():
 
 # --- HLAVNÁ APP ---
 if vybrany_cln == "🔴 Červený čln":
-    st.title("Minúty 2026 🏄")
+    st.title("Minúty 2026 🏄,,")
 else:
     st.title(f"Minúty 2026 – {vybrany_cln} 🏄")
 
