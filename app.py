@@ -157,7 +157,7 @@ def save_record_callback():
 
 # --- HLAVNÁ APP ---
 if vybrany_cln == "🔴 Červený čln":
-    st.title("Minúty 2026 🏄,,")
+    st.title("Minúty 2026 🏄")
 else:
     st.title(f"Minúty 2026 – {vybrany_cln} 🏄")
 
@@ -361,3 +361,46 @@ if not full_df_with_minutes.empty and vybrane_názvy:
         st.info("Pre vybrané mesiace nie sú žiadne záznamy.")
 elif not vybrane_názvy:
     st.info("☝️ Klikni na mesiace vyššie.")
+
+//lyžiar
+st.divider()
+# --- SEKCIA: EXPORT PRE KONKRÉTNEHO LYŽIARA ---
+st.header("Export pre konkrétneho lyžiara")
+
+if not full_df_with_minutes.empty:
+    zoznam_mien_export = load_names()
+    vybrane_meno_export = st.selectbox(
+        "Vyber lyžiara na stiahnutie dát:",
+        options=zoznam_mien_export,
+        index=None,
+        placeholder="Začni písať alebo vyber meno...",
+        key="export_meno_selectbox"
+    )
+
+    if vybrane_meno_export:
+        # Filtrovanie dát pre vybrané meno
+        person_df = full_df_with_minutes[full_df_with_minutes['Meno'] == vybrane_meno_export].copy()
+
+        if not person_df.empty:
+            # Zoskupenie minút podľa dátumu (ak jazdil v jeden deň viackrát, sčíta ich)
+            # a zoradenie od najstaršieho po najnovší
+            person_export = person_df.groupby('Date', as_index=False)['Minúty'].sum()
+            person_export = person_export.sort_values(by='Date', ascending=True)
+            
+            # Prejmenovanie stĺpcov presne podľa požiadavky
+            person_export.columns = ['Dátum', 'Počet minút']
+
+            # Kódovanie utf-8-sig zabezpečí, že sa CSV otvorí v Exceli so správnou diakritikou
+            csv_person = person_export.to_csv(index=False).encode('utf-8-sig')
+
+            st.download_button(
+                label=f"📥 Stiahnuť výsledky pre {vybrane_meno_export} (CSV)",
+                data=csv_person,
+                file_name=f"minuty_{vybrane_meno_export.lower().replace(' ', '_')}_{date.today()}.csv",
+                mime="text/csv",
+                key="download_person_csv"
+            )
+        else:
+            st.info(f"Pre meno **{vybrane_meno_export}** sa v databáze nenašli žiadne záznamy.")
+else:
+    st.info("Databáza je prázdna.")
