@@ -406,112 +406,74 @@ if not full_df_with_minutes.empty:
 else:
     st.info("Databáza je prázdna.")
 
+---------nové-------------
+
+
+st.divider()
+# --- SEKCIA: EXPORT PRE KONKRÉTNEHO LYŽIARA (SÚČET ZA DEŇ) ---
+st.header("Export pre konkrétneho lyžiara (súčet za deň)")
+
+if not full_df_with_minutes.empty:
+    zoznam_mien_export = load_names()
+    vybrane_meno_export = st.selectbox(
+        "Vyber lyžiara na stiahnutie dát:",
+        options=zoznam_mien_export,
+        index=None,
+        placeholder="Začni písať alebo vyber meno...",
+        key="export_meno_selectbox"
+    )
+
+    if vybrane_meno_export:
+        person_df = full_df_with_minutes[full_df_with_minutes['Meno'] == vybrane_meno_export].copy()
+
+        if not person_df.empty:
+            person_export = person_df.groupby('Date', as_index=False)['Minúty'].sum()
+            person_export = person_export.sort_values(by='Date', ascending=True)
+            person_export.columns = ['Dátum', 'Počet minút']
+
+            csv_person = person_export.to_csv(index=False).encode('utf-8-sig')
+
+            st.download_button(
+                label=f"📥 Stiahnuť súčet minút pre {vybrane_meno_export} (CSV)",
+                data=csv_person,
+                file_name=f"minuty_{vybrane_meno_export.lower().replace(' ', '_')}_2026.csv",
+                mime="text/csv",
+                key="download_person_csv"
+            )
+        else:
+            st.info(f"Pre meno **{vybrane_meno_export}** sa v databáze nenašli žiadne záznamy.")
 
 st.divider()
 # --- SEKCIA: PODROBNÝ EXPORT (JEDNOTLIVÉ JAZDY) ---
 st.header("Podrobný export (jednotlivé jazdy)")
 
 if not full_df_with_minutes.empty:
-    zoznam_mien_detail = load_names()
     vybrane_meno_detail = st.selectbox(
         "Vyber lyžiara pre podrobný výpis jázd:",
-        options=zoznam_mien_detail,
+        options=zoznam_mien_export,
         index=None,
         placeholder="Začni písať alebo vyber meno...",
         key="export_meno_detail_selectbox"
     )
 
     if vybrane_meno_detail:
-        # Filtrovanie dát pre vybrané meno bez zoskupovania
         person_detail_df = full_df_with_minutes[full_df_with_minutes['Meno'] == vybrane_meno_detail].copy()
 
         if not person_detail_df.empty:
-            # Zoradenie od najstaršieho po najnovší záznam (vrátane poradia v rámci jedného dňa)
             person_detail_df = person_detail_df.sort_values(by=['Date', 'SortValue'], ascending=[True, True])
+            detail_export = person_detail_df[['Date', 'Minúty']].copy()
+            detail_export.columns = ['Dátum', 'Počet minút']
 
-            # --- VYTVORENIE EXCEL SÚBORU ---
-            wb_det = Workbook()
-            ws_det = wb_det.active
-            ws_det.title = "Jednotlivé jazdy"
-
-            # 1. Nadpis
-            ws_det.merge_cells("A1:B1")
-            title_cell = ws_det["A1"]
-            title_cell.value = f"Export minút pre {vybrane_meno_detail} za sezónu 2026"
-            title_cell.font = Font(size=13, bold=True, color="1F4E78")
-            title_cell.alignment = Alignment(horizontal="center", vertical="center")
-            ws_det.row_dimensions[1].height = 30
-
-            # 2. Hlavička tabuľky (Riadok 3)
-            headers = ["Dátum", "Počet minút"]
-            header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-            header_font = Font(bold=True, color="000000")
-            thick_bottom = Side(style='medium', color='1F4E78')
-            thin_side = Side(style='thin', color='D9D9D9')
-
-            for col_num, header_title in enumerate(headers, start=1):
-                cell = ws_det.cell(row=3, column=col_num)
-                cell.value = header_title
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-                cell.border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thick_bottom)
-            ws_det.row_dimensions[3].height = 24
-
-            # 3. Dáta - každý záznam na samostatný riadok (od riadku 4)
-            data_border = Border(
-                left=Side(style='thin', color='D9D9D9'),
-                right=Side(style='thin', color='D9D9D9'),
-                top=Side(style='thin', color='D9D9D9'),
-                bottom=Side(style='thin', color='D9D9D9')
-            )
-
-            for row_idx, row in enumerate(person_detail_df[['Date', 'Minúty']].itertuples(index=False), start=4):
-                # Dátum
-                c_date = ws_det.cell(row=row_idx, column=1)
-                c_date.value = str(row[0])
-                c_date.alignment = Alignment(horizontal="center")
-                c_date.border = data_border
-
-                # Počet minút
-                c_min = ws_det.cell(row=row_idx, column=2)
-                c_min.value = int(row[1])
-                c_min.alignment = Alignment(horizontal="right")
-                c_min.border = data_border
-
-            # 4. Riadok SPOLU na konci tabuľky
-            last_row = 4 + len(person_detail_df)
-            sum_border = Border(top=Side(style='thin', color='1F4E78'), bottom=Side(style='double', color='1F4E78'))
-
-            c_lbl = ws_det.cell(row=last_row, column=1)
-            c_lbl.value = "SPOLU"
-            c_lbl.font = Font(bold=True)
-            c_lbl.alignment = Alignment(horizontal="center")
-            c_lbl.border = sum_border
-
-            c_val = ws_det.cell(row=last_row, column=2)
-            c_val.value = int(person_detail_df['Minúty'].sum())
-            c_val.font = Font(bold=True)
-            c_val.alignment = Alignment(horizontal="right")
-            c_val.border = sum_border
-
-            # Nastavenie šírky stĺpcov
-            ws_det.column_dimensions['A'].width = 18
-            ws_det.column_dimensions['B'].width = 16
-
-            # Uloženie Excelu do pamäte
-            excel_buffer_det = io.BytesIO()
-            wb_det.save(excel_buffer_det)
-            excel_data_det = excel_buffer_det.getvalue()
+            csv_detail = detail_export.to_csv(index=False).encode('utf-8-sig')
 
             st.download_button(
-                label=f"📥 Stiahnuť jednotlivé jazdy pre {vybrane_meno_detail} (Excel)",
-                data=excel_data_det,
-                file_name=f"jazdy_{vybrane_meno_detail.lower().replace(' ', '_')}_2026.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_person_detail_excel"
+                label=f"📥 Stiahnuť jednotlivé jazdy pre {vybrane_meno_detail} (CSV)",
+                data=csv_detail,
+                file_name=f"jazdy_{vybrane_meno_detail.lower().replace(' ', '_')}_2026.xlsx".replace('.xlsx', '.csv'),
+                mime="text/csv",
+                key="download_person_detail_csv"
             )
         else:
             st.info(f"Pre meno **{vybrane_meno_detail}** sa v databáze nenašli žiadne záznamy.")
-else:
-    st.info("Databáza je prázdna.")
+
+
