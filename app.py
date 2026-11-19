@@ -406,7 +406,7 @@ if not full_df_with_minutes.empty:
 else:
     st.info("Databáza je prázdna.")
 
----------nové-------------
+# --- NOVÉ ---
 
 
 st.divider()
