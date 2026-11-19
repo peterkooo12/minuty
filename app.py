@@ -409,39 +409,6 @@ else:
 # --- NOVÉ ---
 
 
-st.divider()
-# --- SEKCIA: EXPORT PRE KONKRÉTNEHO LYŽIARA (SÚČET ZA DEŇ) ---
-st.header("Export pre konkrétneho lyžiara (súčet za deň)")
-
-if not full_df_with_minutes.empty:
-    zoznam_mien_export = load_names()
-    vybrane_meno_export = st.selectbox(
-        "Vyber lyžiara na stiahnutie dát:",
-        options=zoznam_mien_export,
-        index=None,
-        placeholder="Začni písať alebo vyber meno...",
-        key="export_meno_selectbox"
-    )
-
-    if vybrane_meno_export:
-        person_df = full_df_with_minutes[full_df_with_minutes['Meno'] == vybrane_meno_export].copy()
-
-        if not person_df.empty:
-            person_export = person_df.groupby('Date', as_index=False)['Minúty'].sum()
-            person_export = person_export.sort_values(by='Date', ascending=True)
-            person_export.columns = ['Dátum', 'Počet minút']
-
-            csv_person = person_export.to_csv(index=False).encode('utf-8-sig')
-
-            st.download_button(
-                label=f"📥 Stiahnuť súčet minút pre {vybrane_meno_export} (CSV)",
-                data=csv_person,
-                file_name=f"minuty_{vybrane_meno_export.lower().replace(' ', '_')}_2026.csv",
-                mime="text/csv",
-                key="download_person_csv"
-            )
-        else:
-            st.info(f"Pre meno **{vybrane_meno_export}** sa v databáze nenašli žiadne záznamy.")
 
 st.divider()
 # --- SEKCIA: PODROBNÝ EXPORT (JEDNOTLIVÉ JAZDY) ---
